@@ -27,7 +27,11 @@ include $(TOPDIR)/config.mk
 
 LIB	= $(obj)libnet.a
 
+ifeq ($(COMPRESSED_UBOOT),1) # cu570m condition branch
+COBJS	= net.o tftp.o rarp.o eth.o
+else # old default path
 COBJS	= net.o tftp.o bootp.o rarp.o eth.o nfs.o sntp.o
+endif # cu570m
 
 SRCS	:= $(COBJS:.o=.c)
 OBJS	:= $(addprefix $(obj),$(COBJS))

@@ -156,6 +156,12 @@ IPaddr_t	NetPingIP;		/* the ip address to ping 		*/
 static void PingStart(void);
 #endif
 
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+extern void athr_hdr_func(void);
+#endif
+/* cu570m end */
+
 #if (CONFIG_COMMANDS & CFG_CMD_CDP)
 static void CDPStart(void);
 #endif
@@ -269,6 +275,11 @@ int
 NetLoop(proto_t protocol)
 {
 	bd_t *bd = gd->bd;
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+	static int AthrHdr_Flag = 0;
+#endif
+/* cu570m end */
 
 #ifdef CONFIG_NET_MULTI
 	NetRestarted = 0;
@@ -300,15 +311,44 @@ NetLoop(proto_t protocol)
 		NetArpWaitTxPacket -= (ulong)NetArpWaitTxPacket % PKTALIGN;
 		NetArpWaitTxPacketSize = 0;
 	}
-
+/* cu570m condition branch */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+	if(!AthrHdr_Flag) {
+		eth_halt();
+		if (eth_init(bd) < 0) {
+		eth_halt();
+			return(-1);
+		}
+		AthrHdr_Flag = 1;
+	}
+#else /* old default path */
 	eth_halt();
 #ifdef CONFIG_NET_MULTI
+/* cu570m start */
+#if defined(CFG_VITESSE_73XX_NOPHY) || defined(CFG_REH132) || defined (CONFIG_AG7240_SPEPHY)
+	/*
+	 * There is no PHY in the DNI AP83 board with vitesse switch
+	 * VSC7395XYV, so set the eth1 interface to switch ports, so
+	 * that u-boot can route all the traffic through the switch
+	 * ports.
+	 */
+	 /*
+	 * ag7240 uses eth1 as LAN and eth0 as WAN in uboot
+	 * because GE0 is MIDO server which must initialize first
+	 * modified by tiger 07/20/09
+	 */
+	setenv("ethact", "eth1");
+#else
+        setenv("ethact", "eth0");
+#endif
+/* cu570m end */
 	eth_set_current();
 #endif
 	if (eth_init(bd) < 0) {
 		eth_halt();
 		return(-1);
 	}
+#endif /* cu570m */
 
 restart:
 #ifdef CONFIG_NET_MULTI
@@ -380,9 +420,22 @@ restart:
 		NetOurVLAN = getenv_VLAN("vlan");	/* VLANs must be read */
 		NetOurNativeVLAN = getenv_VLAN("nvlan");
 		break;
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+	case ATHRHDR:
+		athr_hdr_func();
+		break;
+#endif
+/* cu570m end */
 	default:
 		break;
 	}
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+	if(protocol == ATHRHDR)
+		goto skip_netloop;
+#endif
+/* cu570m end */
 
 	switch (net_check_prereq (protocol)) {
 	case 1:
@@ -415,7 +468,7 @@ restart:
 			DhcpRequest();		/* Basically same as BOOTP */
 			break;
 #endif /* CFG_CMD_DHCP */
-
+#ifndef COMPRESSED_UBOOT /* cu570m */
 		case BOOTP:
 			BootpTry = 0;
 			BootpRequest ();
@@ -425,6 +478,7 @@ restart:
 			RarpTry = 0;
 			RarpRequest ();
 			break;
+#endif /* cu570m */
 #if (CONFIG_COMMANDS & CFG_CMD_PING)
 		case PING:
 			PingStart();
@@ -475,6 +529,7 @@ restart:
 	 *	Main packet reception loop.  Loop receiving packets until
 	 *	someone sets `NetState' to a state that terminates.
 	 */
+skip_netloop: /* cu570m */
 	for (;;) {
 		WATCHDOG_RESET();
 #ifdef CONFIG_SHOW_ACTIVITY
@@ -497,8 +552,13 @@ restart:
 			puts ("\nAbort\n");
 			return (-1);
 		}
-
+/* cu570m condition branch */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+                if(protocol != ATHRHDR)
+			ArpTimeoutCheck();
+#else /* old default path */
 		ArpTimeoutCheck();
+#endif /* cu570m */
 
 		/*
 		 *	Check for a timeout, and run the timeout handler
@@ -507,6 +567,7 @@ restart:
 		if (timeHandler && ((get_timer(0) - timeStart) > timeDelta)) {
 			thand_f *x;
 
+#if !defined(CFG_ATHRS26_PHY) && !defined(CFG_ATHRHDR_EN) /* cu570m */
 #if defined(CONFIG_MII) || (CONFIG_COMMANDS & CFG_CMD_MII)
 #  if defined(CFG_FAULT_ECHO_LINK_DOWN) && \
       defined(CONFIG_STATUS_LED) &&	   \
@@ -521,6 +582,7 @@ restart:
 			}
 #  endif /* CFG_FAULT_ECHO_LINK_DOWN, ... */
 #endif /* CONFIG_MII, ... */
+#endif /* cu570m */
 			x = timeHandler;
 			timeHandler = (thand_f *)0;
 			(*x)();
@@ -536,6 +598,12 @@ restart:
 			goto restart;
 
 		case NETLOOP_SUCCESS:
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+			if(protocol == ATHRHDR)
+				return 1;
+#endif
+/* cu570m end */
 			if (NetBootFileXferSize > 0) {
 				char buf[10];
 				printf("Bytes transferred = %ld (%lx hex)\n",
@@ -572,6 +640,16 @@ startAgainHandler(uchar * pkt, unsigned dest, unsigned src, unsigned len)
 
 void NetStartAgain (void)
 {
+
+/* cu570m start */
+#ifdef FW_RECOVERY
+	extern ushort fw_recovery;
+
+	if(fw_recovery != 0)
+		return;
+#endif
+/* cu570m end */
+
 	char *nretry;
 	int noretry = 0, once = 0;
 
@@ -770,7 +848,14 @@ static void PingStart(void)
 #if defined(CONFIG_NET_MULTI)
 	printf ("Using %s device\n", eth_get_name());
 #endif	/* CONFIG_NET_MULTI */
-	NetSetTimeout (10 * CFG_HZ, PingTimeout);
+
+#ifndef TPWD_FOR_LINUX_CAL /* cu570m */
+	NetSetTimeout (10 * CFG_HZ, PingTimeout); /* old default branch */
+#else /* cu570m condition branch */
+	/* shorten ping timeout.  by HouXB, 01Feb13 */
+	NetSetTimeout (CFG_HZ, PingTimeout);
+#endif /* cu570m */
+
 	NetSetHandler (PingHandler);
 
 	PingSend();
@@ -1140,6 +1225,11 @@ NetReceive(volatile uchar * inpkt, int len)
 	IPaddr_t tmp;
 	int	x;
 	uchar *pkt;
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+        uint8_t type;
+#endif
+/* cu570m end */
 #if (CONFIG_COMMANDS & CFG_CMD_CDP)
 	int iscdp;
 #endif
@@ -1148,6 +1238,25 @@ NetReceive(volatile uchar * inpkt, int len)
 #ifdef ET_DEBUG
 	printf("packet received\n");
 #endif
+
+/* cu570m start */
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN)
+	type = (inpkt[1] & 0xf);
+	/* check for ack */
+       if(type == 0x6){
+               (*packetHandler)(inpkt,0,0,0);
+		return;
+	}
+	else if (type == 0x0) {
+	   inpkt = inpkt + ATHRHDR_LEN;  /* Remove ATHRHDR */
+	   len = len - ATHRHDR_LEN;
+	}
+	else{
+		printf("Packet dropped! Type invalid.\n");
+		return;
+	}
+#endif
+/* cu570m end */
 
 	NetRxPkt = inpkt;
 	NetRxPktLen = len;
