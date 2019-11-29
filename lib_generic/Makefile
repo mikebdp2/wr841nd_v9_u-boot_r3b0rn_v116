@@ -25,10 +25,20 @@ include $(TOPDIR)/config.mk
 
 LIB	= $(obj)libgeneric.a
 
+ifeq ($(COMPRESSED_UBOOT),1) # cu570m condition branch
+COBJS    = crc32.o ctype.o display_options.o ldiv.o \
+			string.o vsprintf.o LzmaWrapper.o LzmaDecode.o
+else # old default path
+# LzmaDecode.o LzmaWrapper.o - cu570m
 COBJS	= bzlib.o bzlib_crctable.o bzlib_decompress.o \
 	  bzlib_randtable.o bzlib_huffman.o \
 	  crc32.o ctype.o display_options.o ldiv.o \
-	  string.o vsprintf.o zlib.o
+	  string.o vsprintf.o zlib.o \
+	  LzmaDecode.o LzmaWrapper.o
+endif # cu570m
+
+# cu570m
+CFLAGS += -DCONFIG_LZMA=1
 
 SRCS 	:= $(COBJS:.o=.c)
 OBJS	:= $(addprefix $(obj),$(COBJS))
