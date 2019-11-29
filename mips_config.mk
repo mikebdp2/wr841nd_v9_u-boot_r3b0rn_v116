@@ -22,3 +22,9 @@
 #
 
 PLATFORM_CPPFLAGS += -DCONFIG_MIPS -D__MIPS__
+
+# cu570m start
+ifeq ($(FLASH_TYPE),S25FL128P)
+   PLATFORM_CPPFLAGS += -D$(FLASH_TYPE)
+endif
+# cu570m end

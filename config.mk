@@ -105,6 +105,9 @@ endif
 HOSTCFLAGS	= -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 HOSTSTRIP	= strip
 
+# cu570m
+COMPRESS    = lzma
+
 #########################################################################
 #
 # Option checker (courtesy linux kernel) to ensure
@@ -127,6 +130,9 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJDUMP = $(CROSS_COMPILE)objdump
 RANLIB	= $(CROSS_COMPILE)RANLIB
 
+# cu570m
+.depend : CC = $(CROSS_COMPILE)gcc
+
 ifneq (,$(findstring s,$(MAKEFLAGS)))
 ARFLAGS = cr
 else
@@ -134,7 +140,9 @@ ARFLAGS = crv
 endif
 RELFLAGS= $(PLATFORM_RELFLAGS)
 DBGFLAGS= -g # -DDEBUG
-OPTFLAGS= -Os #-fomit-frame-pointer
+# cu570m
+### R3B0RN -Os => -O ### #-fomit-frame-pointer
+OPTFLAGS= -O
 ifndef LDSCRIPT
 #LDSCRIPT := $(TOPDIR)/board/$(BOARDDIR)/u-boot.lds.debug
 ifeq ($(CONFIG_NAND_U_BOOT),y)
@@ -144,6 +152,9 @@ LDSCRIPT := $(TOPDIR)/board/$(BOARDDIR)/u-boot.lds
 endif
 endif
 OBJCFLAGS += --gap-fill=0xff
+
+# cu570m
+LDSCRIPT_BOOTSTRAP := $(TOPDIR)/board/$(BOARDDIR)/u-boot-bootstrap.lds
 
 gccincdir := $(shell $(CC) -print-file-name=include)
 
@@ -158,12 +169,45 @@ CPPFLAGS += -I$(TOPDIR)/include
 CPPFLAGS += -fno-builtin -ffreestanding -nostdinc 	\
 	-isystem $(gccincdir) -pipe $(PLATFORM_CPPFLAGS)
 
+# cu570m
+### R3B0RN $(R3B0RN_UBOOT_EXTRA_CPPFLAGS) ###
+CPPFLAGS += $(R3B0RN_UBOOT_EXTRA_CPPFLAGS)
+
 ifdef BUILD_TAG
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes \
 	-DBUILD_TAG='"$(BUILD_TAG)"'
 else
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes
+
+# cu570m start
+ifeq ($(COMPRESSED_UBOOT),1)
+CFLAGS += -DCOMPRESSED_UBOOT=1
 endif
+
+ifeq ($(BUILD_OPTIMIZED),y)
+### R3B0RN    -mips32r2    -mtune=mips32r2 => -mtune=34kc    ===> R3B0RN_UBOOT_EXTRA_MIPSFLAGS ###
+### R3B0RN -Os => -O ===> OPTFLAGS ###
+CFLAGS += -funit-at-a-time
+endif
+endif
+
+ifeq ($(BUILD_TYPE),jffs2)
+CFLAGS += -DROOTFS=1
+else
+ifeq ($(BUILD_TYPE),squashfs)
+CFLAGS += -DROOTFS=2
+endif
+endif
+
+ifdef ATH_SST_FLASH
+CFLAGS += -DATH_SST_FLASH=1
+endif
+
+# which is used to load vxWorks.bin and run it for calibrate DUT
+ifeq ($(TPWD_FOR_LINUX_CAL),1)
+CFLAGS += -DTPWD_FOR_LINUX_CAL=1
+endif
+# cu570m end
 
 # avoid trigraph warnings while parsing pci.h (produced by NIOS gcc-2.9)
 # this option have to be placed behind -Wall -- that's why it is here
@@ -186,7 +230,19 @@ endif
 
 AFLAGS := $(AFLAGS_DEBUG) -D__ASSEMBLY__ $(CPPFLAGS)
 
+# cu570m start
+ifeq ($(COMPRESSED_UBOOT),1)
+AFLAGS += -DCOMPRESSED_UBOOT=1
+endif
+# cu570m end
+
 LDFLAGS += -Bstatic -T $(LDSCRIPT) -Ttext $(TEXT_BASE) $(PLATFORM_LDFLAGS)
+
+# cu570m start
+ifeq ($(COMPRESSED_UBOOT), 1)
+LDFLAGS_BOOTSTRAP += -Bstatic -T $(LDSCRIPT_BOOTSTRAP) -Ttext $(BOOTSTRAP_TEXT_BASE) $(PLATFORM_LDFLAGS)
+endif
+# cu570m end
 
 # Location of a usable BFD library, where we define "usable" as
 # "built for ${HOST}, supports ${TARGET}".  Sensible values are
@@ -215,6 +271,10 @@ ifeq ($(PCI_CLOCK),PCI_66M)
 CFLAGS := $(CFLAGS) -DPCI_66M
 endif
 
+# cu570m
+### R3B0RN $(UBOOT_GCC_4_3_3_EXTRA_CFLAGS) => $(R3B0RN_UBOOT_EXTRA_MIPSFLAGS) ###
+CFLAGS += -g
+
 #########################################################################
 
 export	CONFIG_SHELL HPATH HOSTCC HOSTCFLAGS CROSS_COMPILE \
@@ -224,23 +284,58 @@ export	TEXT_BASE PLATFORM_CPPFLAGS PLATFORM_RELFLAGS CPPFLAGS CFLAGS AFLAGS
 
 #########################################################################
 
+# cu570m start
+# ifeq ($(V),1)
+#   Q =
+# else
+#   Q = @
+# endif
+#
+# export quiet Q V
+# cu570m end
+
+# CPP -> Q,CPP - cu570m start
 ifndef REMOTE_BUILD
 
 %.s:	%.S
+ifneq ($(V),1)
+	@echo [CPP] $(abspath $(CURDIR)/$<)
+endif
 	$(CPP) $(AFLAGS) -o $@ $<
+
 %.o:	%.S
+ifneq ($(V),1)
+	@echo [CC] $(abspath $(CURDIR)/$<)
+endif
 	$(CC) $(AFLAGS) -c -o $@ $<
+
 %.o:	%.c
+ifneq ($(V),1)
+	@echo [CC] $(abspath $(CURDIR)/$<)
+endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 else
 
 $(obj)%.s:	%.S
-	$(CPP) $(AFLAGS) -o $@ $<
-$(obj)%.o:	%.S
-	$(CC) $(AFLAGS) -c -o $@ $<
-$(obj)%.o:	%.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+ifneq ($(V),1)
+	@echo [CPP] $(abspath $(CURDIR)/$<)
 endif
+	$(CPP) $(AFLAGS) -o $@ $<
+
+$(obj)%.o:	%.S
+ifneq ($(V),1)
+	@echo [CC] $(abspath $(CURDIR)/$<)
+endif
+	$(CC) $(AFLAGS) -c -o $@ $<
+
+$(obj)%.o:	%.c
+ifneq ($(V),1)
+	@echo [CC] $(abspath $(CURDIR)/$<)
+endif
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+endif
+# CPP -> Q,CPP - cu570m end
 
 #########################################################################
