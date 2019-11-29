@@ -48,7 +48,11 @@
 /* We use a 36 bit physical address map here and
    cannot access physical memory directly from core */
 #define UNCACHED_SDRAM(a) (((unsigned long)(a)) | 0x20000000)
-#else	/* !CONFIG_AU1X00 */
+/* cu570m start */
+#elif defined(CONFIG_AR7100) || defined(CONFIG_AR7240) || defined(CONFIG_ATHEROS)
+#define UNCACHED_SDRAM(a)   KSEG1ADDR((a))
+#else	/* !CONFIG_AR7100 */ /* AU1X00 -> AR7100 - cu570m */
+/* cu570m end */
 #define UNCACHED_SDRAM(a) PHYSADDR(a)
 #endif	/* CONFIG_AU1X00 */
 #endif	/* __ASSEMBLY__ */

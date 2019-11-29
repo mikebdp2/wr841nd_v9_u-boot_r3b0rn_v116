@@ -8,6 +8,9 @@
  * Copyright (C) 1996 Paul M. Antoine
  * Copyright (C) 1999 Silicon Graphics, Inc.
  */
+
+/* extern -> static - cu570m */
+
 #ifndef _ASM_PROCESSOR_H
 #define _ASM_PROCESSOR_H
 
@@ -219,7 +222,7 @@ extern int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 /*
  * Return saved PC of a blocked thread.
  */
-extern inline unsigned long thread_saved_pc(struct thread_struct *t)
+static inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
 	extern void ret_from_fork(void);
 
