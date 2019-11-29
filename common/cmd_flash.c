@@ -278,6 +278,7 @@ flash_fill_sect_ranges (ulong addr_first, ulong addr_last,
 	return rcode;
 }
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 int do_flinfo ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	ulong bank;
@@ -305,6 +306,7 @@ int do_flinfo ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	flash_print_info (&flash_info[bank-1]);
 	return 0;
 }
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 int do_flerase (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
@@ -325,7 +327,9 @@ int do_flerase (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 	if (strcmp(argv[1], "all") == 0) {
 		for (bank=1; bank<=CFG_MAX_FLASH_BANKS; ++bank) {
+#ifdef FLASH_DEBUG /* cu570m */
 			printf ("Erase Flash Bank # %ld ", bank);
+#endif /* cu570m */
 			info = &flash_info[bank-1];
 			rcode = flash_erase (info, 0, info->sector_count-1);
 		}
@@ -337,8 +341,10 @@ int do_flerase (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 			puts ("Bad sector specification\n");
 			return 1;
 		}
+#ifdef FLASH_DEBUG /* cu570m */
 		printf ("Erase Flash Sectors %d-%d in Bank # %d ",
 			sect_first, sect_last, (info-flash_info)+1);
+#endif /* cu570m */
 		rcode = flash_erase(info, sect_first, sect_last);
 		return rcode;
 	}
@@ -353,12 +359,12 @@ int do_flerase (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 				info = &flash_info[bank];
 				addr_first = part->offset + info->start[0];
 				addr_last = addr_first + part->size - 1;
-
+#ifdef FLASH_DEBUG /* cu570m */
 				printf ("Erase Flash Parition %s, "
 						"bank %d, 0x%08lx - 0x%08lx ",
 						argv[1], bank, addr_first,
 						addr_last);
-
+#endif /* cu570m */
 				rcode = flash_sect_erase(addr_first, addr_last);
 				return rcode;
 			}
@@ -381,7 +387,9 @@ int do_flerase (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 				CFG_MAX_FLASH_BANKS);
 			return 1;
 		}
+#ifdef FLASH_DEBUG /* cu570m */
 		printf ("Erase Flash Bank # %ld ", bank);
+#endif /* cu570m */
 		info = &flash_info[bank-1];
 		rcode = flash_erase (info, 0, info->sector_count-1);
 		return rcode;
@@ -423,6 +431,7 @@ int flash_sect_erase (ulong addr_first, ulong addr_last)
 		     ++bank, ++info) {
 			if (s_first[bank]>=0) {
 				erased += s_last[bank] - s_first[bank] + 1;
+#ifdef FLASH_DEBUG /* cu570m */
 				debug ("Erase Flash from 0x%08lx to 0x%08lx "
 					"in Bank # %ld ",
 					info->start[s_first[bank]],
@@ -430,6 +439,9 @@ int flash_sect_erase (ulong addr_first, ulong addr_last)
 						info->start[0] + info->size - 1:
 						info->start[s_last[bank]+1] - 1,
 					bank+1);
+#else /* cu570m */
+				printf( "Erasing flash... ");
+#endif /* cu570m */
 				rcode = flash_erase (info, s_first[bank], s_last[bank]);
 			}
 		}
@@ -442,6 +454,7 @@ int flash_sect_erase (ulong addr_first, ulong addr_last)
 	return rcode;
 }
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 int do_protect (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	flash_info_t *info;
@@ -669,7 +682,7 @@ int flash_sect_protect (int p, ulong addr_first, ulong addr_last)
 	}
 	return rcode;
 }
-
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 /**************************************************/
 #if (CONFIG_COMMANDS & CFG_CMD_JFFS2) && defined(CONFIG_JFFS2_CMDLINE)
@@ -682,12 +695,14 @@ int flash_sect_protect (int p, ulong addr_first, ulong addr_last)
 # define TMP_PROT_OFF	/* empty */
 #endif
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 U_BOOT_CMD(
 	flinfo,    2,    1,    do_flinfo,
 	"flinfo  - print FLASH memory information\n",
 	"\n    - print information for all FLASH memory banks\n"
 	"flinfo N\n    - print information for FLASH memory bank # N\n"
 );
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 U_BOOT_CMD(
 	erase,   3,   1,  do_flerase,
@@ -703,6 +718,7 @@ U_BOOT_CMD(
 	"erase all\n    - erase all FLASH banks\n"
 );
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 U_BOOT_CMD(
 	protect,  4,  1,   do_protect,
 	"protect - enable or disable FLASH write protection\n",
@@ -727,6 +743,7 @@ U_BOOT_CMD(
 	TMP_PROT_OFF
 	"protect off all\n    - make all FLASH banks writable\n"
 );
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 #undef	TMP_ERASE
 #undef	TMP_PROT_ON

@@ -215,6 +215,14 @@ int do_bootvx ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 			(char *) bootaddr);
 	printf ("## Starting vxWorks at 0x%08lx ...\n", addr);
 
+	  /* cu570m start */
+	/*  by huangwenzhong, 10May13 */
+	/* from zhengyongfei, for boot from vxWorks */
+	disable_interrupts();
+	mips_cache_flush();
+	mips_icache_flush_ix();
+	  /* cu570m end */
+
 	((void (*)(void)) addr) ();
 
 	puts ("## vxWorks terminated\n");

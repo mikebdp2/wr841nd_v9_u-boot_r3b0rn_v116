@@ -31,6 +31,7 @@
 #include <malloc.h>
 #include <zlib.h>
 #include <bzlib.h>
+#include <LzmaWrapper.h> /* cu570m */
 #include <environment.h>
 #include <asm/byteorder.h>
 
@@ -150,6 +151,15 @@ image_header_t header;
 
 ulong load_addr = CFG_LOAD_ADDR;		/* Default Load Address */
 
+/* cu570m start */
+#ifdef FW_RECOVERY
+	ushort fw_recovery = 0;
+#endif
+
+#define CONFIG_LZMA 1
+
+#if 0 /* cu570m big start */
+/* cu570m end */
 int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	ulong	iflag;
@@ -230,7 +240,7 @@ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	len  = ntohl(hdr->ih_size);
 
 	if (verify) {
-		puts ("   Verifying Checksum ... ");
+		printf("   Verifying Checksum at 0x%p ...", data); /* cu570m */
 		if (crc32 (0, (uchar *)data, len) != ntohl(hdr->ih_dcrc)) {
 			printf ("Bad Data CRC\n");
 			SHOW_BOOT_PROGRESS (-3);
@@ -316,6 +326,19 @@ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	dcache_disable();
 #endif
 
+/* cu570m start */
+#if defined(CONFIG_AR7100) || defined(CONFIG_AR7240) || defined(CONFIG_ATHEROS)
+	/*
+	 * Flush everything, restore caches for linux
+	 */
+	mips_cache_flush();
+	mips_icache_flush_ix();
+
+	/* XXX - this causes problems when booting from flash */
+	/* dcache_disable(); */
+#endif
+/* cu570m end */
+
 	switch (hdr->ih_comp) {
 	case IH_COMP_NONE:
 		if(ntohl(hdr->ih_load) == addr) {
@@ -341,6 +364,8 @@ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 #endif	/* CONFIG_HW_WATCHDOG || CONFIG_WATCHDOG */
 		}
 		break;
+
+#ifndef COMPRESSED_UBOOT /* cu570m */
 	case IH_COMP_GZIP:
 		printf ("   Uncompressing %s ... ", name);
 		if (gunzip ((void *)ntohl(hdr->ih_load), unc_len,
@@ -369,6 +394,21 @@ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		}
 		break;
 #endif /* CONFIG_BZIP2 */
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
+
+#ifdef CONFIG_LZMA /* cu570m start */
+	case IH_COMP_LZMA:
+		printf ("   Uncompressing %s ... ", name);
+		i = lzma_inflate ((unsigned char *)data, len, (unsigned char*)ntohl(hdr->ih_load), &unc_len);
+		if (i != LZMA_RESULT_OK) {
+			printf ("LZMA ERROR %d - must RESET board to recover\n", i);
+			SHOW_BOOT_PROGRESS (-6);
+			udelay(100000);
+			do_reset (cmdtp, flag, argc, argv);
+		}
+		break;
+#endif /* CONFIG_LZMA */ /* cu570m end */
+
 	default:
 		if (iflag)
 			enable_interrupts();
@@ -460,6 +500,151 @@ int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 #endif
 	return 1;
 }
+
+/* cu570m big else */
+#else
+
+/* changed by lqm, 18Jan08 */
+#include "tpLinuxTag.h"		/* support TP-LINK Linux Tag */
+
+// TODO: ??? MACRO ???
+LINUX_FLASH_STRUCT linuxFlash =
+						{
+							0x000000,	/* boot loader 	*/
+							0x01fc00,	/* mac address	*/
+							0x01fe00,	/* pin address	*/
+							0x020000,	/* kernel		*/
+							0x120000,	/* root fs		*/
+							0x3e0000,	/* config		*/
+							0x3f0000,	/* radio		*/
+						};
+
+/* added by lqm, 18Jan08, copy from fake_zimage_header() */
+image_header_t *fake_image_header(image_header_t *hdr, ulong kernelTextAddr, ulong entryPoint, int size)
+{
+	ulong checksum = 0;
+
+	memset(hdr, 0, sizeof(image_header_t));
+
+	/* Build new header */
+	hdr->ih_magic = htonl(IH_MAGIC);
+	hdr->ih_time  = 0;
+	hdr->ih_size  = htonl(size);
+	hdr->ih_load  = htonl(kernelTextAddr);
+	hdr->ih_ep    = htonl(entryPoint);
+	hdr->ih_dcrc  = htonl(checksum);
+	hdr->ih_os    = IH_OS_LINUX;
+	hdr->ih_arch  = IH_CPU_MIPS;
+	hdr->ih_type  = IH_TYPE_KERNEL;
+	hdr->ih_comp  = IH_COMP_GZIP;
+
+	strncpy((char *)hdr->ih_name, "(none)", IH_NMLEN);
+
+	hdr->ih_hcrc = htonl(checksum);
+
+	return hdr;
+}
+
+int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
+{
+	ulong	iflag;
+	ulong	addr;
+	ulong	data, len, checksum;
+	ulong	kernelTextAddr, kernelEntryPoint, kernelLen;
+	ulong  *len_ptr;
+	uint	unc_len = CFG_BOOTM_LEN;
+	int	i, verify = 0;
+	char	*name, *s;
+	int	(*appl)(int, char *[]);
+	image_header_t *hdr = &header;
+
+	if (argc < 2) {
+		addr = load_addr;
+	} else {
+		addr = simple_strtoul(argv[1], NULL, 16);
+	}
+
+	SHOW_BOOT_PROGRESS (1);
+	printf ("## Booting image at %08lx ...\n", addr);
+
+    name = (char *) addr;
+
+	kernelTextAddr = *(ulong *)(name+116);
+	kernelEntryPoint = *(ulong *)(name+120);
+	kernelLen = *(ulong *)(name+132);
+
+	fake_image_header(hdr, kernelTextAddr, kernelEntryPoint, kernelLen);
+
+	data = addr + 512;
+	len  = ntohl(hdr->ih_size);
+
+	/* TODO ??? fileTag ??? magic number ??? checksum */
+	SHOW_BOOT_PROGRESS (2);
+
+	name = "Kernel Image";
+	SHOW_BOOT_PROGRESS (6);
+
+	/*
+	 * We have reached the point of no return: we are going to
+	 * overwrite all exception vector code, so we cannot easily
+	 * recover from any failures any more...
+	 */
+
+	iflag = disable_interrupts();
+
+#ifdef CONFIG_AMIGAONEG3SE
+	/*
+	 * We've possible left the caches enabled during
+	 * bios emulation, so turn them off again
+	 */
+	icache_disable();
+	invalidate_l1_instruction_cache();
+	flush_data_cache();
+	dcache_disable();
+#endif
+
+#if defined(CONFIG_AR7100) || defined(CONFIG_AR7240) || defined(CONFIG_ATHEROS)
+	/*
+	 * Flush everything, restore caches for linux
+	 */
+	mips_cache_flush();
+	mips_icache_flush_ix();
+
+	/* XXX - this causes problems when booting from flash */
+	/* dcache_disable(); */
+#endif
+
+#ifdef CONFIG_LZMA
+/*	case IH_COMP_LZMA:*/
+		printf ("   Uncompressing %s ... ", name);
+		i = lzma_inflate ((unsigned char *)data, len, (unsigned char*)ntohl(hdr->ih_load), &unc_len);
+		if (i != LZMA_RESULT_OK) {
+			printf ("LZMA ERROR %d - must RESET board to recover\n", i);
+			SHOW_BOOT_PROGRESS (-6);
+			//udelay(100000);
+			do_reset (cmdtp, flag, argc, argv);
+		}
+/*		break;*/
+#endif /* CONFIG_LZMA */
+	puts ("OK\n");
+	SHOW_BOOT_PROGRESS (7);
+
+/*	case IH_OS_LINUX: */
+#ifdef CONFIG_SILENT_CONSOLE
+	    fixup_silent_linux();
+#endif
+	    do_bootm_linux  (cmdtp, flag, argc, argv,
+			     addr, len_ptr, verify);
+
+	SHOW_BOOT_PROGRESS (-9);
+#ifdef DEBUG
+	puts ("\n## Control returned to monitor - resetting...\n");
+	do_reset (cmdtp, flag, argc, argv);
+#endif
+	return 1;
+}
+
+#endif	/* 0 */ /* cu570m big end */
 
 U_BOOT_CMD(
  	bootm,	CFG_MAXARGS,	1,	do_bootm,
@@ -1396,6 +1581,7 @@ print_type (image_header_t *hdr)
 	case IH_COMP_NONE:	comp = "uncompressed";		break;
 	case IH_COMP_GZIP:	comp = "gzip compressed";	break;
 	case IH_COMP_BZIP2:	comp = "bzip2 compressed";	break;
+	case IH_COMP_LZMA:	comp = "lzma compressed";	break; /* cu570m */
 	default:		comp = "unknown compression";	break;
 	}
 
@@ -1428,6 +1614,8 @@ static void zfree(void *x, void *addr, unsigned nb)
 #define RESERVED	0xe0
 
 #define DEFLATED	8
+
+#ifndef COMPRESSED_UBOOT /* cu570m */
 
 int gunzip(void *dst, int dstlen, unsigned char *src, unsigned long *lenp)
 {
@@ -1490,6 +1678,8 @@ void bz_internal_error(int errcode)
 	printf ("BZIP2 internal error %d\n", errcode);
 }
 #endif /* CONFIG_BZIP2 */
+
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 static void
 do_bootm_rtems (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[],

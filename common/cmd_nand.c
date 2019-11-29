@@ -47,12 +47,14 @@ int find_dev_and_part(const char *id, struct mtd_device **dev,
 
 extern nand_info_t nand_info[];       /* info for NAND chips */
 
+/* cu570m start */ /*
 static int nand_dump_oob(nand_info_t *nand, ulong off)
 {
 	return 0;
 }
+*/ /* cu570m end */
 
-static int nand_dump(nand_info_t *nand, ulong off)
+static int nand_dump(nand_info_t *nand, ulong off) /* nand_dump -> nand_raw_dump - cu570m */
 {
 	int i;
 	u_char *buf, *p;
@@ -72,10 +74,12 @@ static int nand_dump(nand_info_t *nand, ulong off)
 	printf("Page %08x dump:\n", off);
 	i = nand->oobblock >> 4; p = buf;
 	while (i--) {
+		if (page) { /* cu570m */
 		printf( "\t%02x %02x %02x %02x %02x %02x %02x %02x"
 			"  %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7],
 			p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
+		} /* cu570m */
 		p += 16;
 	}
 	puts("OOB:\n");
@@ -89,6 +93,18 @@ static int nand_dump(nand_info_t *nand, ulong off)
 
 	return 0;
 }
+
+/* cu570m start */
+static int nand_dump_oob(nand_info_t *nand, ulong off)
+{
+	return nand_raw_dump(nand, off, 0);
+}
+
+static int nand_dump(nand_info_t *nand, ulong off)
+{
+	return nand_raw_dump(nand, off, 1);
+}
+/* cu570m end */
 
 /* ------------------------------------------------------------------------- */
 
@@ -291,7 +307,7 @@ int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[])
 			}
 		}
 		ret = nand_erase_opts(nand, &opts);
-		printf("%s\n", ret ? "ERROR" : "OK");
+		printf("\n%s\n", ret ? "ERROR" : "OK"); /* sn -> nsn - cu570m */
 
 		return ret == 0 ? 0 : 1;
 	}
@@ -513,19 +529,25 @@ static int nand_load_image(cmd_tbl_t *cmdtp, nand_info_t *nand,
 
 	load_addr = addr;
 
+#ifndef CONFIG_ATH_NAND_SUPPORT /* cu570m */
 	/* Check if we should attempt an auto-start */
 	if (((ep = getenv("autostart")) != NULL) && (strcmp(ep, "yes") == 0)) {
+#endif /* cu570m */
 		char *local_args[2];
 		extern int do_bootm(cmd_tbl_t *, int, int, char *[]);
 
 		local_args[0] = cmd;
 		local_args[1] = NULL;
 
+#ifndef CONFIG_ATH_NAND_SUPPORT /* cu570m */
 		printf("Automatic boot of image at addr 0x%08lx ...\n", addr);
+#endif /* cu570m */
 
 		do_bootm(cmdtp, 0, 1, local_args);
 		return 1;
+#ifndef CONFIG_ATH_NAND_SUPPORT /* cu570m */
 	}
+#endif /* cu570m */
 	return 0;
 }
 

@@ -38,11 +38,23 @@
 #include <hush.h>
 #endif
 
+/* cu570m start */
+#ifdef FW_RECOVERY/*  by huangwenzhong, 03May13 */
+#include "../board/atheros/common/ath_flash.h"
+#endif
+/* cu570m end */
+
 #include <post.h>
 
 #ifdef CONFIG_SILENT_CONSOLE
 DECLARE_GLOBAL_DATA_PTR;
 #endif
+
+/* cu570m start */
+#ifdef CONFIG_DUALIMAGE_SUPPORT
+extern unsigned findbdr(unsigned int flashaddr);
+#endif
+/* cu570m end */
 
 #if defined(CONFIG_BOOT_RETRY_TIME) && defined(CONFIG_RESET_TO_RETRY)
 extern int do_reset (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);		/* for do_reset() prototype */
@@ -292,6 +304,18 @@ static __inline__ int abortboot(int bootdelay)
 
 /****************************************************************************/
 
+/* cu570m start */
+#ifdef TPWD_FOR_LINUX_CAL
+int is_dev_calibrate()
+{
+	u16 *addr = (u16*)0x9f3f1000;
+
+	return (*addr != 0xFFFF);
+
+}
+#endif
+/* cu570m end */
+
 void main_loop (void)
 {
 #ifndef CFG_HUSH_PARSER
@@ -386,7 +410,7 @@ void main_loop (void)
 	s = getenv ("bootdelay");
 	bootdelay = s ? (int)simple_strtol(s, NULL, 10) : CONFIG_BOOTDELAY;
 
-	debug ("### main_loop entered: bootdelay=%d\n\n", bootdelay);
+/*	debug ("### main_loop entered: bootdelay=%d\n\n", bootdelay); */ /* cu570m */
 
 # ifdef CONFIG_BOOT_RETRY_TIME
 	init_cmd_timeout ();
@@ -402,7 +426,183 @@ void main_loop (void)
 #endif /* CONFIG_BOOTCOUNT_LIMIT */
 		s = getenv ("bootcmd");
 
-	debug ("### main_loop: bootcmd=\"%s\"\n", s ? s : "<UNDEFINED>");
+/* cu570m start */
+       if (!s) {
+#ifdef CONFIG_ROOTFS_FLASH
+           /* XXX if rootfs is in flash, expect uImage to be in flash */
+#ifdef CONFIG_AR7100
+           setenv ("bootcmd", "bootm 0xbf200000");
+#else
+           setenv ("bootcmd", "bootm 0xbf450000");
+#endif /* CONFIG_AR7100 */
+#else
+           setenv ("bootcmd", "tftpboot 0x8022c090 uImage; bootm 0x8022c090");
+#endif
+       }
+
+#ifdef CONFIG_DUALIMAGE_SUPPORT
+		findbdr(0);
+#endif
+
+/* Download vxWorks.bin ,then waiting for calculating */
+#ifdef TPWD_FOR_LINUX_CAL
+
+#define SERVER_IP1	"192.168.1.100"
+#define SERVER_IP2	"192.168.1.110"
+
+	if (!is_dev_calibrate())
+	{
+		/* wait for ethernet configure done */
+		udelay(2000*1000);
+
+		/* detect tftp server IP address */
+		if (pingTest(SERVER_IP1) == 0)
+		{
+			setenv("serverip", SERVER_IP1);
+		}
+		else if (pingTest(SERVER_IP2) == 0)
+		{
+			setenv("serverip", SERVER_IP2);
+		}
+		else
+		{
+			printf("tftp server ip should be 192.168.1.100 or 192.168.1.110\n");
+		}
+		/* load vxWork.bin */
+		setenv("bootcmd", "tftpboot 80001000 vxWorks.bin; go 80001000");
+	}
+#endif
+
+#ifdef FW_RECOVERY/*  by huangwenzhong, 03May13 */
+
+#define ORG_FILE_BASE 			0x9F01F000
+#define ORG_PRODUCT_ID_POS 		(ORG_FILE_BASE + 0xD00)
+#define ORG_PRODUCT_VER_POS 	(ORG_FILE_BASE + 0xD04)
+
+#define UP_FILE_BASE 			0x80800000
+#define UP_PRODUCT_ID_POS 		(UP_FILE_BASE + 0x40)
+#define UP_PRODUCT_VER_POS 		(UP_FILE_BASE + 0x44)
+
+#define PRODUCT_ID_VER_LEN 		4
+#define FW_IMAGE_NAME			"_tp_recovery.bin"
+#define FW_IMAGE_UPLOAD_CMD		"tftp 0x80800000 "
+
+			int is_auto_upload_firmware;
+			unsigned int original_product_id;
+			unsigned int original_product_ver;
+			unsigned int recovery_product_id;
+			unsigned int recovery_product_ver;
+			unsigned long file_size = 0;
+			extern ushort fw_recovery;
+
+
+			udelay(10 * 1000);
+			ath_auf_gpio_init();
+
+			is_auto_upload_firmware = ath_is_rst_btn_pressed();
+			printf("is_auto_upload_firmware=%d\n", is_auto_upload_firmware);
+
+			if (is_auto_upload_firmware)
+			{
+				char image_name[32] = {0};
+				char upload_cmd[64] = {0};
+
+				strcpy(upload_cmd, FW_IMAGE_UPLOAD_CMD);
+				strcpy(image_name, FW_RECOVERY_DEV);
+				strcat(image_name, FW_IMAGE_NAME);
+				strcat(upload_cmd, image_name);
+
+				ath_fw_led_on();
+
+				/* wait for ethernet config done. by HouXB, 28Apr11 */
+
+				udelay(2000*1000);
+
+				fw_recovery = 1;
+
+				run_command("setenv serverip 192.168.0.66", 0);
+				run_command("setenv ipaddr 192.168.0.86", 0);
+
+				run_command(upload_cmd, 0);
+
+				memcpy(&original_product_id, ORG_PRODUCT_ID_POS, PRODUCT_ID_VER_LEN);
+				memcpy(&original_product_ver, ORG_PRODUCT_VER_POS, PRODUCT_ID_VER_LEN);
+
+				memcpy(&recovery_product_id, UP_PRODUCT_ID_POS, PRODUCT_ID_VER_LEN);
+				memcpy(&recovery_product_ver, UP_PRODUCT_VER_POS, PRODUCT_ID_VER_LEN);
+
+				if ((original_product_id == recovery_product_id)
+					 && (original_product_ver== recovery_product_ver))
+				{
+					s = getenv("filesize");
+
+					if (s)
+					{
+						file_size = simple_strtoul(s, NULL, 16);
+					}
+					printf("Firmware recovery: product id verify sucess!\n");
+					printf("Firmware recovery: filesize = 0x%x.\n", file_size);
+					if (FLASH_SIZE == 4)
+					{
+						if (file_size == 0x3c0000)
+						{
+							run_command("erase 0x9f020000 +3c0000; cp.b 0x80800000 0x9f020000 3c0000", 0);
+						}
+						else if (file_size == 0x3e0200)
+						{
+							run_command("erase 0x9f020000 +3c0000; cp.b 0x80820200 0x9f020000 3c0000", 0);
+						}
+					}
+					else if (FLASH_SIZE == 8)
+					{
+						if (file_size == 0x7c0000)
+						{
+							run_command("erase 0x9f020000 +7c0000; cp.b 0x80800000 0x9f020000 7c0000", 0);
+						}
+						else if (file_size == 0x7e0200)
+						{
+							run_command("erase 0x9f020000 +7c0000; cp.b 0x80820200 0x9f020000 7c0000", 0);
+						}
+					}
+					else if (FLASH_SIZE == 16)
+					{
+						if (file_size == 0xfc0000)
+						{
+							run_command("erase 0x9f020000 +fc0000; cp.b 0x80800000 0x9f020000 fc0000", 0);
+						}
+						else if (file_size == 0xfe0200)
+						{
+							run_command("erase 0x9f020000 +fc0000; cp.b 0x80820200 0x9f020000 fc0000", 0);
+						}
+					}
+					do_reset (NULL, 0, 0, NULL);
+				}
+				else
+				{
+					printf("auto update firmware: product id verify fail!\n");
+					ath_fw_led_off();
+				}
+			}
+			else
+			{
+				ath_fw_led_off();
+			}
+
+#undef ORG_FILE_BASE
+#undef ORG_PRODUCT_ID_POS
+#undef ORG_PRODUCT_VER_POS
+#undef UP_FILE_BASE
+#undef UP_PRODUCT_ID_POS
+#undef UP_PRODUCT_VER_POS
+#undef PRODUCT_ID_VER_LEN
+#undef FW_IMAGE_NAME
+#undef FW_IMAGE_UPLOAD_CMD
+#endif
+/* cu570m end */
+
+	s = getenv ("bootcmd");
+
+	/* debug ("### main_loop: bootcmd=\"%s\"\n", s ? s : "<UNDEFINED>"); */ /* cu570m */
 
 	if (bootdelay >= 0 && s && !abortboot (bootdelay)) {
 # ifdef CONFIG_AUTOBOOT_KEYED

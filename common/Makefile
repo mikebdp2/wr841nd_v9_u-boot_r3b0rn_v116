@@ -27,6 +27,26 @@ LIB	= $(obj)libcommon.a
 
 AOBJS	=
 
+ifeq ($(COMPRESSED_UBOOT),1) # cu570m condition branch
+COBJS	= main.o circbuf.o \
+	  cmd_boot.o cmd_bootm.o \
+	  cmd_cache.o cmd_console.o \
+	  cmd_date.o cmd_dcr.o cmd_display.o cmd_doc.o \
+	  cmd_eeprom.o \
+	  cmd_flash.o \
+	  cmd_immap.o cmd_itest.o \
+	  cmd_mem.o \
+	  cmd_mii.o cmd_misc.o \
+	  cmd_nand.o cmd_net.o cmd_nvedit.o \
+	  cmd_reginfo.o cmd_spi.o \
+	  command.o console.o devices.o dlmalloc.o docecc.o \
+	  environment.o env_common.o \
+	  env_nowhere.o \
+	  exports.o \
+	  hush.o lcd.o lists.o \
+	  memsize.o miiphybb.o miiphyutil.o \
+	  serial.o crc16.o
+else # old default path
 COBJS	= main.o ACEX1K.o altera.o bedbug.o circbuf.o \
 	  cmd_ace.o cmd_autoscript.o \
 	  cmd_bdinfo.o cmd_bedbug.o cmd_bmp.o cmd_boot.o cmd_bootm.o \
@@ -52,11 +72,33 @@ COBJS	= main.o ACEX1K.o altera.o bedbug.o circbuf.o \
 	  s_record.o serial.o soft_i2c.o soft_spi.o spartan2.o spartan3.o \
 	  usb.o usb_kbd.o usb_storage.o \
 	  virtex2.o xilinx.o crc16.o xyzModem.o cmd_mac.o
+endif # cu570m
+
+# cu570m start
+ifndef BOOT_FROM_NAND
+COBJS	+= flash.o
+endif
+
+ifeq ($(VXWORKS_UBOOT),1)
+COBJS	+=  cmd_elf.o
+endif
+
+ifeq ($(TPWD_FOR_LINUX_CAL),1)
+COBJS	+=  cmd_elf.o
+endif
+# cu570m end
 
 SRCS	:= $(AOBJS:.o=.S) $(COBJS:.o=.c)
 OBJS	:= $(addprefix $(obj),$(AOBJS) $(COBJS))
 
 CPPFLAGS += -I..
+
+# cu570m start
+ifeq ($(DUAL_FIRMWAREIMAGE_SUPPORT),1)
+CFLAGS += -DCONFIG_DUALIMAGE_SUPPORT
+OBJS += cmd_bdr.o
+endif
+# cu570m end
 
 all:	$(LIB) $(AOBJS)
 

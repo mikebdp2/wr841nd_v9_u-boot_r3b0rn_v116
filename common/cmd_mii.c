@@ -28,6 +28,13 @@
 #include <common.h>
 #include <command.h>
 
+/* cu570m start */
+#ifdef CONFIG_ATH_NAND_BR
+#include <nand.h>
+#endif
+
+#ifndef COMPRESSED_UBOOT
+/* cu570m end */
 #if (CONFIG_COMMANDS & CFG_CMD_MII)
 #include <miiphy.h>
 
@@ -596,3 +603,270 @@ U_BOOT_CMD(
 #endif /* CONFIG_TERSE_MII */
 
 #endif /* CFG_CMD_MII */
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
+
+/* cu570m start */
+#ifdef BOARDCAL
+extern flash_info_t flash_info[];	/* info for FLASH chips */
+
+/**********************************************************************************
+** do_mac_setting
+**
+** This is the executable portion of the progmac command.  This will process the
+** MAC address strings, and program them into the appropriate flash sector..
+**
+*/
+#ifdef CONFIG_ATH_NAND_BR
+
+#define ATH_NAND_NAND_PART              "ath-nand"
+
+
+unsigned long long
+ath_nand_get_cal_offset(const char *ba)
+{
+        char *mtdparts, ch, *pn, *end;
+        unsigned long long off = 0, size;
+
+        mtdparts = strstr(ba, ATH_NAND_NAND_PART);
+        if (!mtdparts) {
+                goto bad;
+        }
+        mtdparts = strstr(mtdparts, ":");
+        if (!mtdparts) {
+                goto bad;
+        }
+        end = strstr(mtdparts, " ");
+        if (!end) {
+                end = mtdparts + strlen(mtdparts);
+        }
+
+        for (;mtdparts && mtdparts < end;) {
+                mtdparts ++;
+                size = simple_strtoul(mtdparts, &mtdparts, 0);
+                ch = *mtdparts;
+                switch (ch) {
+                case 'g': case 'G': size = size * 1024;
+                case 'm': case 'M': size = size * 1024;
+                case 'k': case 'K': size = size * 1024;
+                }
+                pn = mtdparts + 2;
+                if (strncmp(pn, ATH_CAL_NAND_PARTITION,
+                        sizeof(ATH_CAL_NAND_PARTITION) - 1) == 0) {
+                        return off;
+                }
+                off += size;
+                mtdparts = strstr(mtdparts, ",");
+        }
+
+bad:
+        return ATH_CAL_OFF_INVAL;
+}
+
+/**********************************************************************************
+** do_mac_setting
+**
+** This is the executable portion of the progmac command.  This will process the
+** MAC address strings, and program them into the appropriate flash sector..
+**
+*/
+
+int do_mac (cmd_tbl_t * cmdtp, int flag, int argc, char *argv[])
+{
+	char    sectorBuff[256*1024];
+	int     serno;
+	int     product_id;
+	int     ret;
+	ulong   off, size;
+	nand_info_t *nand;
+
+	/*
+	 * caldata partition is of 128k
+	 *
+	 */
+	nand = &nand_info[nand_curr_device];
+	size = nand->erasesize;
+	/*
+	 * Argv[1] contains the value string.  Convert to binary, and
+	 * program the values in flash
+	 */
+
+	serno = simple_strtoul(argv[1],0,10);
+
+	/*
+	 * If the serial number is less than 0, or greater than
+	 * 0x1fff, it's out of range
+	 */
+
+	if(serno < 0 || serno > 0x1fff) {
+		printf("Serno out of range\n",serno);
+		return 1;
+	}
+
+    if (argc > 2) {
+        product_id = simple_strtoul(argv[2], 0, 10);
+    } else {
+        product_id = ATHEROS_PRODUCT_ID;
+    }
+
+	if(product_id < 0 || product_id > 0x7ff) {
+		printf("product id out of range %d\n", product_id);
+		return 1;
+	}
+
+	/*
+	 * Create the 24 bit number that composes the lower 3 bytes of
+	 * the MAC address
+	 */
+
+	serno = 0xFFFFFF & ( (product_id << 13) | (serno & 0x1fff));
+
+	/*
+	 * Get the Offset of Caldata partition
+	 */
+	off = ath_nand_get_cal_offset(getenv("bootargs"));
+	if(off == ATH_CAL_OFF_INVAL) {
+		printf("Invalid CAL offset \n");
+		return 1;
+	}
+
+	/*
+	 * Get the values from flash, and program into the MAC address
+	 * registers
+	 */
+	ret = nand_read(nand, (loff_t)off, &size, (u_char *)sectorBuff);
+	printf(" %d bytes %s: %s\n", size,
+		       "read", ret ? "ERROR" : "OK");
+	if(ret != 0 ) {
+		return 1;
+	}
+
+	/*
+	 * Set the first and second values
+	 */
+
+	sectorBuff[0] = 0x00;
+	sectorBuff[1] = 0x03;
+	sectorBuff[2] = 0x7f;
+
+	sectorBuff[3] = 0xFF & (serno >> 16);
+	sectorBuff[4] = 0xFF & (serno >> 8);
+	sectorBuff[5] = 0xFF &  serno;
+
+	/*
+	 * Increment by 1 for the second MAC address
+	 */
+
+	serno++;
+	memcpy(&sectorBuff[6],&sectorBuff[0],3);
+	sectorBuff[9]  = 0xFF & (serno >> 16);
+	sectorBuff[10] = 0xFF & (serno >> 8);
+	sectorBuff[11] = 0xFF &  serno;
+
+	ret = nand_erase(nand,(loff_t)off, size);
+	printf(" %d bytes %s: %s\n", size,
+		       "erase", ret ? "ERROR" : "OK");
+
+	if(ret != 0 ) {
+		return 1;
+	}
+
+	ret = nand_write(nand, (loff_t)off, &size, (u_char *)sectorBuff);
+	printf(" %d bytes %s: %s\n", size,
+		       "write", ret ? "ERROR" : "OK");
+	if(ret != 0 ) {
+		return 1;
+	}
+
+	return 0;
+}
+#else /*CONFIG_ATH_NAND_BR */
+
+int do_mac (cmd_tbl_t * cmdtp, int flag, int argc, char *argv[])
+{
+	uchar    sectorBuff[CFG_FLASH_SECTOR_SIZE];
+	int     serno;
+	int     product_id;
+
+	/*
+	 * Argv[1] contains the value string.  Convert to binary, and
+	 * program the values in flash
+	 */
+
+	serno = simple_strtoul(argv[1],0,10);
+
+	/*
+	 * If the serial number is less than 0, or greater than
+	 * 0x1fff, it's out of range
+	 */
+
+	if(serno < 0 || serno > 0x1fff) {
+		printf("Serno out of range\n",serno);
+		return 1;
+	}
+
+    if (argc > 2) {
+        product_id = simple_strtoul(argv[2], 0, 10);
+    } else {
+        product_id = ATHEROS_PRODUCT_ID;
+    }
+
+	if(product_id < 0 || product_id > 0x7ff) {
+		printf("product id out of range %d\n", product_id);
+		return 1;
+	}
+
+	/*
+	 * Create the 24 bit number that composes the lower 3 bytes of
+	 * the MAC address
+	 */
+
+	serno = 0xFFFFFF & ( (product_id << 13) | (serno & 0x1fff));
+
+	/*
+	 * Get the values from flash, and program into the MAC address
+	 * registers
+	 */
+
+	memcpy(sectorBuff,(void *)BOARDCAL, CFG_FLASH_SECTOR_SIZE);
+
+	/*
+	 * Set the first and second values
+	 */
+
+	sectorBuff[0] = 0x00;
+	sectorBuff[1] = 0x03;
+	sectorBuff[2] = 0x7f;
+
+	sectorBuff[3] = 0xFF & (serno >> 16);
+	sectorBuff[4] = 0xFF & (serno >> 8);
+	sectorBuff[5] = 0xFF &  serno;
+
+	/*
+	 * Increment by 1 for the second MAC address
+	 */
+
+	serno++;
+	memcpy(&sectorBuff[6],&sectorBuff[0],3);
+	sectorBuff[9]  = 0xFF & (serno >> 16);
+	sectorBuff[10] = 0xFF & (serno >> 8);
+	sectorBuff[11] = 0xFF &  serno;
+
+	flash_erase(flash_info,CAL_SECTOR,CAL_SECTOR);
+	write_buff(flash_info,sectorBuff, BOARDCAL, CFG_FLASH_SECTOR_SIZE);
+
+	return 0;
+}
+#endif /*CONFIG_ATH_NAND_BR */
+
+U_BOOT_CMD(
+    progmac, 3, 0, do_mac,
+    "progmac - Set ethernet MAC addresses\n",
+    "progmac <serno> [<product_id>] - Program the MAC addresses\n"
+    "                <serno> is the value of the last\n"
+    "                4 digits (decimal) of the serial number.\n"
+    "                Optional parameter <product_id> specifies\n"
+    "                the board's product ID (decimal)\n"
+);
+
+#endif /* BOARDCAL */
+/* cu570m end */

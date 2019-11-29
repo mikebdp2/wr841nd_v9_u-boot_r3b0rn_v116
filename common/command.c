@@ -78,6 +78,7 @@ U_BOOT_CMD(
 
 #endif	/*  CFG_CMD_ECHO */
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 #ifdef CFG_HUSH_PARSER
 
 int
@@ -230,6 +231,7 @@ U_BOOT_CMD(
 
 
 #endif
+#endif /* #ifdef COMPRESSED_UBOOT */ /* cu570m */
 
 /*
  * Use puts() instead of printf() to avoid printf buffer overflow

@@ -313,6 +313,7 @@ int do_mem_mwc ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 }
 #endif /* CONFIG_MX_CYCLIC */
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 int do_mem_cmp (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	ulong	addr1, addr2, count, ngood;
@@ -390,6 +391,7 @@ int do_mem_cmp (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		ngood == 1 ? "" : "s");
 	return rcode;
 }
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 int do_mem_cp ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
@@ -419,7 +421,8 @@ int do_mem_cp ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		return 1;
 	}
 
-#ifndef CFG_NO_FLASH
+// #ifndef CFG_NO_FLASH /* cu570m */
+#if !defined(CFG_NO_FLASH) && !defined(CONFIG_ATH_NAND_BR) /* cu570m */
 	/* check if we are copying to Flash */
 	if ( (addr2info(dest) != NULL)
 #ifdef CONFIG_HAS_DATAFLASH
@@ -527,6 +530,7 @@ int do_mem_cp ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	return 0;
 }
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 int do_mem_base (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	if (argc > 1) {
@@ -684,6 +688,7 @@ int do_mem_loopw (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	}
 }
 #endif /* CONFIG_LOOPW */
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 /*
  * Perform a memory test. A more complete alternative test can be
@@ -1098,6 +1103,7 @@ mod_mem(cmd_tbl_t *cmdtp, int incrflag, int flag, int argc, char *argv[])
 	return 0;
 }
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 #ifndef CONFIG_CRC32_VERIFY
 
 int do_mem_crc (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
@@ -1184,6 +1190,7 @@ int do_mem_crc (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 }
 #endif	/* CONFIG_CRC32_VERIFY */
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 /**************************************************/
 #if (CONFIG_COMMANDS & CFG_CMD_MEMORY)
@@ -1219,6 +1226,7 @@ U_BOOT_CMD(
 	"[.b, .w, .l] source target count\n    - copy memory\n"
 );
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 U_BOOT_CMD(
 	cmp,    4,     1,     do_mem_cmp,
 	"cmp     - memory compare\n",
@@ -1266,6 +1274,7 @@ U_BOOT_CMD(
 	"    - loop on a set of addresses\n"
 );
 #endif /* CONFIG_LOOPW */
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 U_BOOT_CMD(
 	mtest,    4,    1,     do_mem_mtest,
@@ -1274,6 +1283,7 @@ U_BOOT_CMD(
 	"    - simple RAM read/write test\n"
 );
 
+#ifndef COMPRESSED_UBOOT /* cu570m */
 #ifdef CONFIG_MX_CYCLIC
 U_BOOT_CMD(
 	mdc,     4,     1,      do_mem_mdc,
@@ -1287,6 +1297,7 @@ U_BOOT_CMD(
 	"[.b, .w, .l] address value delay(ms)\n    - memory write cyclic\n"
 );
 #endif /* CONFIG_MX_CYCLIC */
+#endif /* #ifndef COMPRESSED_UBOOT */ /* cu570m */
 
 #endif
 #endif	/* CFG_CMD_MEMORY */

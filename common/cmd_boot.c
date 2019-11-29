@@ -28,9 +28,11 @@
 #include <command.h>
 #include <net.h>
 
-#if defined(CONFIG_I386)
+#if defined(CONFIG_I386) || defined(CONFIG_MIPS) /* || defined(CONFIG_MIPS) - cu570m */
 DECLARE_GLOBAL_DATA_PTR;
 #endif
+
+#if (defined(TPWD_FOR_LINUX_CAL) || !defined(COMPRESSED_UBOOT)) /*  by huangwenzhong, 10May13 */ /* cu570m */
 
 int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
@@ -41,6 +43,14 @@ int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		printf ("Usage:\n%s\n", cmdtp->usage);
 		return 1;
 	}
+
+	  /* cu570m start */
+	/*  by huangwenzhong, 10May13 */
+	/* from zhengyongfei, for boot from vxWorks */
+	disable_interrupts();
+	mips_cache_flush();
+	mips_icache_flush_ix();
+	  /* cu570m end */
 
 	addr = simple_strtoul(argv[1], NULL, 16);
 
@@ -58,7 +68,14 @@ int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	argv[0] = (char *)gd;
 #endif
 #if !defined(CONFIG_NIOS)
-	rc = ((ulong (*)(int, char *[]))addr) (--argc, &argv[1]);
+	/* cu570m condition branch */
+	if (argc > 2 && argv[2][0] == 'b') {
+		printf ("## Board info at 0x%08lX ...\n", gd->bd);
+		rc = ((ulong (*)(int, int, int, int))addr)(gd->bd, 0, 0, 0);
+	} else {
+		/* old default path */
+		rc = ((ulong (*)(int, char *[]))addr) (--argc, &argv[1]);
+	}
 #else
 	/*
 	 * Nios function pointers are address >> 1
@@ -79,6 +96,8 @@ U_BOOT_CMD(
 	"addr [arg ...]\n    - start application at address 'addr'\n"
 	"      passing 'arg' as arguments\n"
 );
+
+#endif /* #ifndef COMPRESSED_UBOOT */ /*  by huangwenzhong, 10May13 */ /* cu570m */
 
 extern int do_reset (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 
