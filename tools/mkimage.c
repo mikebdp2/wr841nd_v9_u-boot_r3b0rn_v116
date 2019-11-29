@@ -139,6 +139,7 @@ table_entry_t comp_name[] = {
     {	IH_COMP_NONE,	"none",		"uncompressed",		},
     {	IH_COMP_BZIP2,	"bzip2",	"bzip2 compressed",	},
     {	IH_COMP_GZIP,	"gzip",		"gzip compressed",	},
+    {   IH_COMP_LZMA,   "lzma",         "lzma compressed",      }, /* cu570m */
     {	-1,		"",		"",			},
 };
 
