@@ -268,7 +268,11 @@ typedef struct icmphdr {
  * maximum packet size =  1518
  * maximum packet size and multiple of 32 bytes =  1536
  */
+#ifdef CFG_ATHRHDR_EN /* cu570m condition branch */
+#define PKTSIZE			1520
+#else /* old default path */
 #define PKTSIZE			1518
+#endif /* cu570m */
 #define PKTSIZE_ALIGN		1536
 /*#define PKTSIZE		608*/
 
@@ -336,7 +340,11 @@ extern int		NetState;		/* Network loop state		*/
 extern int		NetRestartWrap;		/* Tried all network devices	*/
 #endif
 
+#if defined(CFG_ATHRS26_PHY) && defined(CFG_ATHRHDR_EN) /* cu570m condition branch */
+typedef enum { BOOTP, RARP, ARP, TFTP, DHCP, PING, DNS, NFS, CDP, NETCONS, SNTP, ATHRHDR } proto_t;
+#else /* old default path */
 typedef enum { BOOTP, RARP, ARP, TFTP, DHCP, PING, DNS, NFS, CDP, NETCONS, SNTP } proto_t;
+#endif /* cu570m */
 
 /* from net/net.c */
 extern char	BootFile[128];			/* Boot File name		*/

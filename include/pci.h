@@ -24,6 +24,8 @@
  * MA 02111-1307 USA
  */
 
+/* extern -> static - cu570m */
+
 #ifndef _PCI_H
 #define _PCI_H
 
@@ -323,7 +325,7 @@ struct pci_region {
 #define PCI_REGION_MEMORY	0x00000100	/* System memory */
 #define PCI_REGION_RO		0x00000200	/* Read-only memory */
 
-extern __inline__ void pci_set_region(struct pci_region *reg,
+static __inline__ void pci_set_region(struct pci_region *reg,
 				      unsigned long bus_start,
 				      unsigned long phys_start,
 				      unsigned long size,
@@ -403,7 +405,7 @@ struct pci_controller {
 	int current_busno;
 };
 
-extern __inline__ void pci_set_ops(struct pci_controller *hose,
+static __inline__ void pci_set_ops(struct pci_controller *hose,
 				   int (*read_byte)(struct pci_controller*,
 						    pci_dev_t, int where, u8 *),
 				   int (*read_word)(struct pci_controller*,
