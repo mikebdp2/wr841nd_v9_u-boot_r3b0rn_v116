@@ -45,13 +45,27 @@ extern int timer_init(void);
 
 extern int incaip_set_cpuclk(void);
 
+/* cu570m start */
+#if defined(CONFIG_WASP_SUPPORT) || defined(CONFIG_MACH_QCA955x) || defined(CONFIG_MACH_QCA953x)
+void ath_set_tuning_caps(void);
+#else
+#define ath_set_tuning_caps()	/* nothing */
+#endif
+/* cu570m end */
+
 extern ulong uboot_end_data;
 extern ulong uboot_end;
 
 ulong monitor_flash_len;
 
+/* cu570m condition branch */
+#ifdef BUILD_VERSION
+const char version_string[] =
+        U_BOOT_VERSION" (Build from LSDK-" BUILD_VERSION " at " __DATE__ " - " __TIME__ ")";
+#else /* old default path */
 const char version_string[] =
 	U_BOOT_VERSION" (" __DATE__ " - " __TIME__ ")";
+#endif /* cu570m */
 
 static char *failed = "*** failed ***\n";
 
@@ -159,17 +173,23 @@ static int init_baudrate (void)
 typedef int (init_fnc_t) (void);
 
 init_fnc_t *init_sequence[] = {
+#ifndef COMPRESSED_UBOOT /* cu570m */
 	timer_init,
+#endif /* cu570m */
 	env_init,		/* initialize environment */
 #ifdef CONFIG_INCA_IP
 	incaip_set_cpuclk,	/* set cpu clock according to environment variable */
 #endif
 	init_baudrate,		/* initialze baudrate settings */
+#ifndef COMPRESSED_UBOOT /* cu570m */
 	serial_init,		/* serial communications setup */
+#endif /* cu570m */
 	console_init_f,
 	display_banner,		/* say that we are here */
+#ifndef COMPRESSED_UBOOT /* cu570m */
 	checkboard,
 	init_func_ram,
+#endif /* cu570m */
 	NULL,
 };
 
@@ -181,6 +201,11 @@ void board_init_f(ulong bootflag)
 	init_fnc_t **init_fnc_ptr;
 	ulong addr, addr_sp, len = (ulong)&uboot_end - CFG_MONITOR_BASE;
 	ulong *s;
+/* cu570m start */
+#ifdef COMPRESSED_UBOOT
+    char board_string[50];
+#endif
+/* cu570m end */
 #ifdef CONFIG_PURPLE
 	void copy_code (ulong);
 #endif
@@ -198,6 +223,16 @@ void board_init_f(ulong bootflag)
 			hang ();
 		}
 	}
+
+/* cu570m start */
+#ifdef COMPRESSED_UBOOT
+    checkboard(board_string);
+    printf("%s\n\n",board_string);
+    gd->ram_size = bootflag;
+	puts ("DRAM:	");
+	print_size (gd->ram_size, "\n");
+#endif
+/* cu570m end */
 
 	/*
 	 * Now that we have DRAM mapped and working, we can
@@ -301,6 +336,11 @@ void board_init_r (gd_t *id, ulong dest_addr)
 #ifndef CFG_ENV_IS_NOWHERE
 	extern char * env_name_spec;
 #endif
+/* cu570m start */
+#ifdef CONFIG_ATH_NAND_SUPPORT
+	extern ulong ath_nand_init(void);
+#endif
+/* cu570m end */
 	char *s, *e;
 	bd_t *bd;
 	int i;
@@ -347,9 +387,11 @@ void board_init_r (gd_t *id, ulong dest_addr)
 	env_name_spec += gd->reloc_off;
 #endif
 
+#ifndef CONFIG_ATH_NAND_BR /* cu570m */
 	/* configure available FLASH banks */
 	size = flash_init();
 	display_flash_config (size);
+#endif /* cu570m */
 
 	bd = gd->bd;
 	bd->bi_flashstart = CFG_FLASH_BASE;
@@ -363,6 +405,12 @@ void board_init_r (gd_t *id, ulong dest_addr)
 	/* initialize malloc() area */
 	mem_malloc_init();
 	malloc_bin_reloc();
+
+/* cu570m start */
+#ifdef CONFIG_ATH_NAND_BR
+	ath_nand_init();
+#endif
+/* cu570m end */
 
 	/* relocate environment function pointers etc. */
 	env_relocate();
@@ -416,6 +464,14 @@ void board_init_r (gd_t *id, ulong dest_addr)
 #endif
 	eth_initialize(gd->bd);
 #endif
+
+/* cu570m start */
+#if defined(CONFIG_ATH_NAND_SUPPORT) && !defined(CONFIG_ATH_NAND_BR)
+	ath_nand_init();
+#endif
+
+        ath_set_tuning_caps(); /* Needed here not to mess with Ethernet clocks */
+/* cu570m end */
 
 	/* main_loop() can return to retry autoboot, if so just run it again. */
 	for (;;) {
